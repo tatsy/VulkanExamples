@@ -525,7 +525,7 @@ void VkBaseApp::endPaint(int imageIndex, const VkUniquePtr<VkSemaphore> &waitSem
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
 
-    std::array<uint32_t, 1> imageIndices = { imageIndex };
+    std::array<uint32_t, 1> imageIndices = { (uint32_t)imageIndex };
     presentInfo.pImageIndices = imageIndices.data();
 
     VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);

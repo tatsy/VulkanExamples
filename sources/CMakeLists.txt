@@ -22,15 +22,17 @@ function(BUILD_EXAMPLE EXPNAME)
     set_property(TARGET ${EXPNAME} APPEND PROPERTY LINK_FLAGS "/DEBUG /PROFILE")
   endif()
 
-  set(SPV_FILES "")
-  foreach(GLSL_FILE IN LISTS SHADER_FILES)
-    get_filename_component(BASENAME ${GLSL_FILE} NAME_WE)
-    add_custom_command(TARGET ${EXPNAME}
-                       DEPENDS ${GLSL_FILE}
-                       WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/${EXPNAME}/shaders"
-                       COMMAND glslangValidator
-                       ARGS -V "\"${GLSL_FILE}\"" -o "\"${BASENAME}.spv\"")
-  endforeach()
+
+  if (MSVC)
+    foreach(GLSL_FILE IN LISTS SHADER_FILES)
+      get_filename_component(BASENAME ${GLSL_FILE} NAME_WE)
+      add_custom_command(TARGET ${EXPNAME}
+                         DEPENDS ${GLSL_FILE}
+                         WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/${EXPNAME}/shaders"
+                         COMMAND glslangValidator
+                         ARGS -V "\"${GLSL_FILE}\"" -o "\"${BASENAME}.spv\"")
+    endforeach()
+  endif()
 endfunction(BUILD_EXAMPLE)
 
 file(GLOB SUBDIR_LIST RELATIVE ${CMAKE_CURRENT_LIST_DIR} "*")

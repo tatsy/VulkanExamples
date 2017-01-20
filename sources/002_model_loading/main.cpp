@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
+#define GLM_ENABLE_EXPERIMENTAL
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -30,8 +31,8 @@
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
-const std::string MODEL_PATH = std::string(SOURCE_DIRECTORY) + "models/chalet.obj";
-const std::string TEXTURE_PATH = std::string(SOURCE_DIRECTORY) + "textures/chalet.jpg";
+const std::string MODEL_PATH = std::string(DATA_DIRECTORY) + "chalet.obj";
+const std::string TEXTURE_PATH = std::string(DATA_DIRECTORY) + "chalet.jpg";
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_LUNARG_standard_validation"

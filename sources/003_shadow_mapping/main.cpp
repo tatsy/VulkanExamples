@@ -3,6 +3,7 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
@@ -37,8 +38,8 @@
 #include "vktexture.h"
 #include "vkonetimecommand.h"
 
-static const std::string TEAPOT_FILE = std::string(SOURCE_DIRECTORY) + "models/teapot.obj";
-static const std::string FLOOR_FILE = std::string(SOURCE_DIRECTORY) + "models/floor.obj";
+static const std::string TEAPOT_FILE = std::string(DATA_DIRECTORY) + "teapot.obj";
+static const std::string FLOOR_FILE = std::string(DATA_DIRECTORY) + "floor.obj";
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -51,6 +52,7 @@ struct UBOScene {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
+    glm::mat4 normal;
     glm::mat4 depthBiasMVP;
     glm::vec3 lightPos;
 };
@@ -885,6 +887,7 @@ private:
         ubo.view = glm::lookAt(glm::vec3(10.0f, 10.0f, 10.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), (float)width() / (float)height(), 0.1f, 100.0f);
         ubo.proj[1][1] *= -1;
+        ubo.normal = glm::transpose(glm::inverse(ubo.view * ubo.model));
         ubo.depthBiasMVP = osUbo.proj * osUbo.view * osUbo.model;
         ubo.lightPos = lightPos;
 
