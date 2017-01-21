@@ -40,11 +40,12 @@
 
 static const std::string TEAPOT_FILE = std::string(DATA_DIRECTORY) + "teapot.obj";
 static const std::string FLOOR_FILE = std::string(DATA_DIRECTORY) + "floor.obj";
+static const std::string FLOOR_TEX_FILE = std::string(DATA_DIRECTORY) + "checker.png";
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
-const bool enableValidationLayers = true;
+const bool enableValidationLayers = false;
 #endif
 
 // Uniform buffer object for draw (vertex shader).
@@ -55,6 +56,7 @@ struct UBOScene {
     glm::mat4 normal;
     glm::mat4 depthBiasMVP;
     glm::vec3 lightPos;
+    int isUseTexture;
 };
 
 // Uniform buffer object for offscreen (vertex shader).
@@ -237,14 +239,23 @@ private:
         uboLayoutBinding.pImmutableSamplers = nullptr;
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-        samplerLayoutBinding.binding = 1;
-        samplerLayoutBinding.descriptorCount = 1;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = nullptr;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutBinding textureSamplerLayoutBinding = {};
+        textureSamplerLayoutBinding.binding = 1;
+        textureSamplerLayoutBinding.descriptorCount = 1;
+        textureSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        textureSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        textureSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        
+        VkDescriptorSetLayoutBinding shadowSamplerLayoutBinding = {};
+        shadowSamplerLayoutBinding.binding = 2;
+        shadowSamplerLayoutBinding.descriptorCount = 1;
+        shadowSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        shadowSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        
+        std::array<VkDescriptorSetLayoutBinding, 3> bindings =
+            { uboLayoutBinding, textureSamplerLayoutBinding, shadowSamplerLayoutBinding };
 
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
         VkDescriptorSetLayoutCreateInfo layoutInfo = {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = bindings.size();
@@ -584,13 +595,11 @@ private:
         createShaderModule(vertShaderCode2, vertShaderModule2);
         createShaderModule(fragShaderCode2, fragShaderModule2);
 
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo2 = {};
         shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         shaderStages[0].module = vertShaderModule2;
         shaderStages[0].pName = "main";
 
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo2 = {};
         shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         shaderStages[1].module = fragShaderModule2;
@@ -644,16 +653,32 @@ private:
     }
 
     void createVbo() {
+        // Set data to VBO (not ready to use).
         teapotVbo = std::make_unique<VkVbo>(this);
         floorVbo = std::make_unique<VkVbo>(this);
         
         teapotVbo->addVertexAttribute(teapotMesh.positions, 0, sizeof(float) * 3, VK_FORMAT_R32G32B32_SFLOAT);
         teapotVbo->addVertexAttribute(teapotMesh.normals, 1, sizeof(float) * 3, VK_FORMAT_R32G32B32_SFLOAT);
+        teapotVbo->addVertexAttribute(teapotMesh.texcoords, 2, sizeof(float) * 2, VK_FORMAT_R32G32_SFLOAT);
         teapotVbo->addIndices(teapotMesh.indices);
 
         floorVbo->addVertexAttribute(floorMesh.positions, 0, sizeof(float) * 3, VK_FORMAT_R32G32B32_SFLOAT);
         floorVbo->addVertexAttribute(floorMesh.normals, 1, sizeof(float) * 3, VK_FORMAT_R32G32B32_SFLOAT);
+        floorVbo->addVertexAttribute(floorMesh.texcoords, 2, sizeof(float) * 2, VK_FORMAT_R32G32_SFLOAT);
         floorVbo->addIndices(floorMesh.indices);
+
+        // Load texture.
+        int texwidth, texheight, channels;
+        uint8_t *bytes = stbi_load(FLOOR_TEX_FILE.c_str(), &texwidth, &texheight, &channels, STBI_rgb_alpha);
+
+        floorTexture = std::make_unique<VkTexture>(this);
+        floorTexture->create(texwidth, texheight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+                             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                             VK_IMAGE_ASPECT_COLOR_BIT);
+        
+        floorTexture->setData(bytes, texwidth * texheight * channels);
+
+        stbi_image_free(bytes);
     }
 
     void setupVbo() {
@@ -662,8 +687,11 @@ private:
     }
 
     void createUniformBuffer() {
-        uniformBuffers.scene = std::make_unique<VkUniformBuffer<UBOScene>>(this);
-        uniformBuffers.scene->create();
+        uniformBuffers.object = std::make_unique<VkUniformBuffer<UBOScene>>(this);
+        uniformBuffers.object->create();
+        
+        uniformBuffers.floor = std::make_unique<VkUniformBuffer<UBOScene>>(this);
+        uniformBuffers.floor->create();
 
         uniformBuffers.shadowMap = std::make_unique<VkUniformBuffer<UBOShadowMap>>(this);
         uniformBuffers.shadowMap->create();
@@ -672,15 +700,15 @@ private:
     void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> poolSizes = {};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[0].descriptorCount = 2;
+        poolSizes[0].descriptorCount = 3;
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = 2;
+        poolSizes[1].descriptorCount = 6;
 
         VkDescriptorPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = poolSizes.size();
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = 2;
+        poolInfo.maxSets = 3;
 
         if (vkCreateDescriptorPool(device(), &poolInfo, nullptr, descriptorPool.replace()) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -696,25 +724,31 @@ private:
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = layouts;
 
-        if (vkAllocateDescriptorSets(device(), &allocInfo, &descriptorSets.scene) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate descriptor set!");
-        }
+        CHECK_VULKAN_RUNTIME_ERROR(
+            vkAllocateDescriptorSets(device(), &allocInfo, &descriptorSets.object),
+            "failed to allocate descriptor set!"
+        );
 
-        // Update descriptor set
+        // Descriptor set for object.
         VkDescriptorBufferInfo bufferInfo = {};
-        bufferInfo.buffer = uniformBuffers.scene->buffer();
+        bufferInfo.buffer = uniformBuffers.object->buffer();
         bufferInfo.offset = 0;
-        bufferInfo.range = uniformBuffers.scene->size();
+        bufferInfo.range = uniformBuffers.object->size();
 
-        VkDescriptorImageInfo imageInfo = {};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = shadowMapFbo->imageView();
-        imageInfo.sampler = shadowMapFbo->sampler();
+        VkDescriptorImageInfo textureImageInfo = {};
+        textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        textureImageInfo.imageView = floorTexture->imageView();
+        textureImageInfo.sampler = floorTexture->sampler();
+        
+        VkDescriptorImageInfo shadowImageInfo = {};
+        shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        shadowImageInfo.imageView = shadowMapFbo->imageView();
+        shadowImageInfo.sampler = shadowMapFbo->sampler();
 
-        std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+        std::array<VkWriteDescriptorSet, 3> descriptorWrites = {};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = descriptorSets.scene;
+        descriptorWrites[0].dstSet = descriptorSets.object;
         descriptorWrites[0].dstBinding = 0;
         descriptorWrites[0].dstArrayElement = 0;
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -722,13 +756,35 @@ private:
         descriptorWrites[0].pBufferInfo = &bufferInfo;
 
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = descriptorSets.scene;
+        descriptorWrites[1].dstSet = descriptorSets.object;
         descriptorWrites[1].dstBinding = 1;
         descriptorWrites[1].dstArrayElement = 0;
         descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pImageInfo = &imageInfo;
+        descriptorWrites[1].pImageInfo = &textureImageInfo;
+        
+        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet = descriptorSets.object;
+        descriptorWrites[2].dstBinding = 2;
+        descriptorWrites[2].dstArrayElement = 0;
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pImageInfo = &shadowImageInfo;
 
+        vkUpdateDescriptorSets(device(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+
+        // Update descriptor set for floor
+        CHECK_VULKAN_RUNTIME_ERROR(
+            vkAllocateDescriptorSets(device(), &allocInfo, &descriptorSets.floor),
+            "failed to allocate descriptor set!"
+        );
+        
+        for (auto &writes : descriptorWrites) {
+            writes.dstSet = descriptorSets.floor;
+        }
+
+        bufferInfo.buffer = uniformBuffers.floor->buffer();
+        bufferInfo.range = uniformBuffers.floor->size();
         vkUpdateDescriptorSets(device(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 
         // Update descriptor set for offscreen
@@ -824,7 +880,7 @@ private:
                 teapotVbo->bindVertexBuffers(commandBuffer);
                 teapotVbo->bindIndexBuffer(commandBuffer);
 
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.scene, 0, 1, &descriptorSets.scene, 0, nullptr);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.scene, 0, 1, &descriptorSets.object, 0, nullptr);
 
                 vkCmdDrawIndexed(commandBuffer, teapotMesh.indices.size(), 1, 0, 0, 0);
             }
@@ -839,7 +895,7 @@ private:
                 floorVbo->bindVertexBuffers(commandBuffer);
                 floorVbo->bindIndexBuffer(commandBuffer);
 
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.scene, 0, 1, &descriptorSets.scene, 0, nullptr);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.scene, 0, 1, &descriptorSets.floor, 0, nullptr);
 
                 vkCmdDrawIndexed(commandBuffer, floorMesh.indices.size(), 1, 0, 0, 0);
             }
@@ -872,7 +928,7 @@ private:
         float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
         glm::mat4 rotMat = glm::rotate(glm::mat4(), time * glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-        // Offscreen
+        // Shadow map
         UBOShadowMap osUbo = {};
         osUbo.model = rotMat;
         osUbo.view = glm::lookAt(lightPos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -881,7 +937,7 @@ private:
 
         uniformBuffers.shadowMap->update(osUbo);
 
-        // Main draw
+        // Scene
         UBOScene ubo = {};
         ubo.model = rotMat;
         ubo.view = glm::lookAt(glm::vec3(10.0f, 10.0f, 10.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -890,8 +946,15 @@ private:
         ubo.normal = glm::transpose(glm::inverse(ubo.view * ubo.model));
         ubo.depthBiasMVP = osUbo.proj * osUbo.view * osUbo.model;
         ubo.lightPos = lightPos;
+        ubo.isUseTexture = 1;  // False
+        uniformBuffers.object->update(ubo);
+        
+        // Floor
+        ubo.model = glm::mat4();
+        ubo.normal = glm::transpose(glm::inverse(ubo.view * ubo.model));
+        ubo.isUseTexture = 0;  // True
+        uniformBuffers.floor->update(ubo);
 
-        uniformBuffers.scene->update(ubo);
     }
 
     void createShaderModule(const std::vector<char>& code, VkUniquePtr<VkShaderModule>& shaderModule) {
@@ -945,7 +1008,8 @@ private:
     } pipelineLayouts;
 
     struct DescriptorSets {
-        VkDescriptorSet scene;
+        VkDescriptorSet object;
+        VkDescriptorSet floor;
         VkDescriptorSet shadowMap;
     } descriptorSets;
 
@@ -967,9 +1031,11 @@ private:
 
     std::unique_ptr<VkVbo> teapotVbo = nullptr;
     std::unique_ptr<VkVbo> floorVbo = nullptr;
+    std::unique_ptr<VkTexture> floorTexture = nullptr;
 
     struct UniformBuffers {
-        std::unique_ptr<VkUniformBuffer<UBOScene>> scene;
+        std::unique_ptr<VkUniformBuffer<UBOScene>> object;
+        std::unique_ptr<VkUniformBuffer<UBOScene>> floor;
         std::unique_ptr<VkUniformBuffer<UBOShadowMap>> shadowMap;
     } uniformBuffers;
 
@@ -986,6 +1052,8 @@ private:
 int main(int argc, char **argv) {
     static const int WIN_WIDTH = 800;
     static const int WIN_HEIGHT = 600;
+    
+    printf("size = %zu\n", sizeof(UBOScene));
 
     MyVulkanApp app(enableValidationLayers);
     app.createWindow(WIN_WIDTH, WIN_HEIGHT, "Vulkan: shadow mapping");

@@ -4,12 +4,15 @@
 
 layout(location = 0) in vec3 f_posView;
 layout(location = 1) in vec3 f_normView;
-layout(location = 2) in vec3 f_lightPosView;
-layout(location = 3) in vec4 f_posScreenLightSpace;
+layout(location = 2) in vec2 f_texCoord;
+layout(location = 3) in vec3 f_lightPosView;
+layout(location = 4) in vec4 f_posScreenLightSpace;
+layout(location = 5) in flat int f_isUseTexture;
 
 layout(location = 0) out vec4 outColor;
 
-layout(binding = 1) uniform sampler2D u_depthMap;
+layout(binding = 1) uniform sampler2D u_texture;
+layout(binding = 2) uniform sampler2D u_depthMap;
 
 float shadowMap() {
     vec4 P = f_posScreenLightSpace / f_posScreenLightSpace.w;
@@ -33,8 +36,15 @@ void main() {
     float ndoth = max(0.0, dot(N, H));
 
     float value = 0.1 + 0.5 * ndotl + 0.6 * pow(ndoth, 64.0);
-    float visibility = shadowMap();
-    value *= visibility;
 
-    outColor = vec4(value, value, value, 1.0);
+    vec3 rgb = vec3(value, value, value);
+    if (f_isUseTexture != 0) {
+        rgb *= texture(u_texture, f_texCoord).rgb;
+    }
+
+    float visibility = shadowMap();
+    rgb *= visibility;
+
+    value = float(f_isUseTexture);
+    outColor = vec4(rgb, 1.0);
 }

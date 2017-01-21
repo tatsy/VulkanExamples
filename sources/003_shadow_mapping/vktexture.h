@@ -41,10 +41,13 @@ private:
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateSampler(parentDevice(), &samplerInfo, nullptr, sampler_.replace()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create depth sampler for offscreen!");
-        }    
+        CHECK_VULKAN_RUNTIME_ERROR(
+            vkCreateSampler(parentDevice(), &samplerInfo, nullptr, sampler_.replace()),
+            "failed to create depth sampler for offscreen!"
+        );
     }
+    
+    
 
     VkUniquePtr<VkSampler> sampler_{parentDevice(), vkDestroySampler};
 };

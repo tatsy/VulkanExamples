@@ -44,6 +44,9 @@ public:
         : TriMesh{} {
         load(filename);
     }
+    
+    virtual ~TriMesh() {
+    }
 
     void load(const std::string &filename) {
         tinyobj::attrib_t attrib;
@@ -51,12 +54,18 @@ public:
         std::vector<tinyobj::material_t> materials;
         std::string err;
 
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filename.c_str())) {
-            throw std::runtime_error(err);
+        bool success = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filename.c_str());
+        if (!err.empty()) {
+            std::cerr << "[WARNING] " << err << std::endl;
+        }
+
+        if (!success) {
+            throw std::runtime_error("[ERROR] failed to load mesh file!");
         }
 
         indices.clear();
 
+        // Unique vertex attributes.
         std::vector<Vertex> vertices;
         std::unordered_map<Vertex, uint32_t> uniqueVertices;
 
@@ -98,6 +107,7 @@ public:
             }
         }
 
+        // Set vertex attributes.
         positions.clear();
         texcoords.clear();
         normals.clear();
@@ -123,6 +133,8 @@ public:
     std::vector<float> texcoords;
     std::vector<float> normals;
     std::vector<uint32_t> indices;
+    uint8_t *diffuse_texture;
+    std::vector<std::string> diffuse_texnames;
 };
 
 #endif  // _TRIMESH_H_
