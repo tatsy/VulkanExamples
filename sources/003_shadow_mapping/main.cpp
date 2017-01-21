@@ -45,18 +45,23 @@ static const std::string FLOOR_TEX_FILE = std::string(DATA_DIRECTORY) + "checker
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
-const bool enableValidationLayers = false;
+const bool enableValidationLayers = true;
 #endif
 
 // Uniform buffer object for draw (vertex shader).
-struct UBOScene {
+// Note that UBOs cannot contain 3-element vector.
+struct UBOSceneVS {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
     glm::mat4 normal;
     glm::mat4 depthBiasMVP;
-    glm::vec3 lightPos;
+    glm::vec4 lightPos;
+};
+
+struct UBOSceneFS {
     int isUseTexture;
+    int isReceiveShadow;
 };
 
 // Uniform buffer object for offscreen (vertex shader).
@@ -105,6 +110,7 @@ protected:
         createGraphicsPipeline();
         createFramebuffers();
         createCommandBuffers();
+        createOffscreenCommandBuffer();
     }
 
     void paintVk() override {
@@ -232,29 +238,36 @@ private:
     }
 
     void createDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        VkDescriptorSetLayoutBinding uboLayoutBindingVS = {};
+        uboLayoutBindingVS.binding = 0;
+        uboLayoutBindingVS.descriptorCount = 1;
+        uboLayoutBindingVS.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBindingVS.pImmutableSamplers = nullptr;
+        uboLayoutBindingVS.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkDescriptorSetLayoutBinding uboLayoutBindingFS = {};
+        uboLayoutBindingFS.binding = 1;
+        uboLayoutBindingFS.descriptorCount = 1;
+        uboLayoutBindingFS.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBindingFS.pImmutableSamplers = nullptr;
+        uboLayoutBindingFS.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutBinding textureSamplerLayoutBinding = {};
-        textureSamplerLayoutBinding.binding = 1;
+        textureSamplerLayoutBinding.binding = 2;
         textureSamplerLayoutBinding.descriptorCount = 1;
         textureSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         textureSamplerLayoutBinding.pImmutableSamplers = nullptr;
         textureSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         
         VkDescriptorSetLayoutBinding shadowSamplerLayoutBinding = {};
-        shadowSamplerLayoutBinding.binding = 2;
+        shadowSamplerLayoutBinding.binding = 3;
         shadowSamplerLayoutBinding.descriptorCount = 1;
         shadowSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         shadowSamplerLayoutBinding.pImmutableSamplers = nullptr;
         shadowSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         
-        std::array<VkDescriptorSetLayoutBinding, 3> bindings =
-            { uboLayoutBinding, textureSamplerLayoutBinding, shadowSamplerLayoutBinding };
+        std::array<VkDescriptorSetLayoutBinding, 4> bindings =
+            { uboLayoutBindingVS, uboLayoutBindingFS, textureSamplerLayoutBinding, shadowSamplerLayoutBinding };
 
         VkDescriptorSetLayoutCreateInfo layoutInfo = {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -396,20 +409,6 @@ private:
         renderPassInfo.renderArea.extent = { shadowMapSize, shadowMapSize };
         renderPassInfo.clearValueCount = 1;
         renderPassInfo.pClearValues = clearValues;
-
-        VkViewport viewport;
-        viewport.x = 0;
-        viewport.y = 0;
-        viewport.width = (float)shadowMapSize;
-        viewport.height = (float)shadowMapSize;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(offscreenCommandBuffer, 0, 1, &viewport);
-        
-        VkRect2D scissor;
-        scissor.offset = { 0, 0 };
-        scissor.extent = { shadowMapSize, shadowMapSize }; 
-        vkCmdSetScissor(offscreenCommandBuffer, 0, 1, &scissor);
 
         vkCmdSetDepthBias(offscreenCommandBuffer, depthBiasConstant, 0.0f, depthBiasSlope);
 
@@ -612,6 +611,10 @@ private:
         pipelineInfo.pVertexInputState = &teapotVertexInputInfo;
         pipelineInfo.layout = pipelineLayouts.shadowMap;
         pipelineInfo.renderPass = renderPasses.shadowMap;
+
+        viewport.width = (float)shadowMapSize;
+        viewport.height = (float)shadowMapSize;
+        scissor.extent = { shadowMapSize, shadowMapSize };
         
         if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, graphicsPipelines.shadowMap.replace()) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline for offscreen!");
@@ -670,13 +673,19 @@ private:
         // Load texture.
         int texwidth, texheight, channels;
         uint8_t *bytes = stbi_load(FLOOR_TEX_FILE.c_str(), &texwidth, &texheight, &channels, STBI_rgb_alpha);
-
+        if (!bytes) {
+            throw std::runtime_error("failed to load texture image!");
+        }
+        
         floorTexture = std::make_unique<VkTexture>(this);
+        floorTexture->setAddressModeU(VK_SAMPLER_ADDRESS_MODE_REPEAT);
+        floorTexture->setAddressModeV(VK_SAMPLER_ADDRESS_MODE_REPEAT);
         floorTexture->create(texwidth, texheight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
-                             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                              VK_IMAGE_ASPECT_COLOR_BIT);
         
-        floorTexture->setData(bytes, texwidth * texheight * channels);
+        floorTexture->setData(bytes, texwidth * texheight * 4);
 
         stbi_image_free(bytes);
     }
@@ -687,11 +696,15 @@ private:
     }
 
     void createUniformBuffer() {
-        uniformBuffers.object = std::make_unique<VkUniformBuffer<UBOScene>>(this);
-        uniformBuffers.object->create();
+        uniformBuffers.objectVS = std::make_unique<VkUniformBuffer<UBOSceneVS>>(this);
+        uniformBuffers.objectVS->create();
+        uniformBuffers.objectFS = std::make_unique<VkUniformBuffer<UBOSceneFS>>(this);
+        uniformBuffers.objectFS->create();
         
-        uniformBuffers.floor = std::make_unique<VkUniformBuffer<UBOScene>>(this);
-        uniformBuffers.floor->create();
+        uniformBuffers.floorVS = std::make_unique<VkUniformBuffer<UBOSceneVS>>(this);
+        uniformBuffers.floorVS->create();
+        uniformBuffers.floorFS = std::make_unique<VkUniformBuffer<UBOSceneFS>>(this);
+        uniformBuffers.floorFS->create();
 
         uniformBuffers.shadowMap = std::make_unique<VkUniformBuffer<UBOShadowMap>>(this);
         uniformBuffers.shadowMap->create();
@@ -730,10 +743,15 @@ private:
         );
 
         // Descriptor set for object.
-        VkDescriptorBufferInfo bufferInfo = {};
-        bufferInfo.buffer = uniformBuffers.object->buffer();
-        bufferInfo.offset = 0;
-        bufferInfo.range = uniformBuffers.object->size();
+        VkDescriptorBufferInfo bufferInfoVS = {};
+        bufferInfoVS.buffer = uniformBuffers.objectVS->buffer();
+        bufferInfoVS.offset = 0;
+        bufferInfoVS.range = uniformBuffers.objectVS->size();
+
+        VkDescriptorBufferInfo bufferInfoFS = {};
+        bufferInfoFS.buffer = uniformBuffers.objectFS->buffer();
+        bufferInfoFS.offset = 0;
+        bufferInfoFS.range = uniformBuffers.objectFS->size();
 
         VkDescriptorImageInfo textureImageInfo = {};
         textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -745,7 +763,7 @@ private:
         shadowImageInfo.imageView = shadowMapFbo->imageView();
         shadowImageInfo.sampler = shadowMapFbo->sampler();
 
-        std::array<VkWriteDescriptorSet, 3> descriptorWrites = {};
+        std::array<VkWriteDescriptorSet, 4> descriptorWrites = {};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets.object;
@@ -753,23 +771,31 @@ private:
         descriptorWrites[0].dstArrayElement = 0;
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pBufferInfo = &bufferInfo;
+        descriptorWrites[0].pBufferInfo = &bufferInfoVS;
 
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSets.object;
         descriptorWrites[1].dstBinding = 1;
         descriptorWrites[1].dstArrayElement = 0;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pImageInfo = &textureImageInfo;
-        
+        descriptorWrites[1].pBufferInfo = &bufferInfoFS;
+
         descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[2].dstSet = descriptorSets.object;
         descriptorWrites[2].dstBinding = 2;
         descriptorWrites[2].dstArrayElement = 0;
         descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descriptorWrites[2].descriptorCount = 1;
-        descriptorWrites[2].pImageInfo = &shadowImageInfo;
+        descriptorWrites[2].pImageInfo = &textureImageInfo;
+        
+        descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[3].dstSet = descriptorSets.object;
+        descriptorWrites[3].dstBinding = 3;
+        descriptorWrites[3].dstArrayElement = 0;
+        descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[3].descriptorCount = 1;
+        descriptorWrites[3].pImageInfo = &shadowImageInfo;
 
         vkUpdateDescriptorSets(device(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 
@@ -783,8 +809,10 @@ private:
             writes.dstSet = descriptorSets.floor;
         }
 
-        bufferInfo.buffer = uniformBuffers.floor->buffer();
-        bufferInfo.range = uniformBuffers.floor->size();
+        bufferInfoVS.buffer = uniformBuffers.floorVS->buffer();
+        bufferInfoVS.range = uniformBuffers.floorVS->size();
+        bufferInfoFS.buffer = uniformBuffers.floorFS->buffer();
+        bufferInfoFS.range = uniformBuffers.floorFS->size();
         vkUpdateDescriptorSets(device(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 
         // Update descriptor set for offscreen
@@ -862,8 +890,8 @@ private:
             renderPassInfo.renderArea.extent = { (uint32_t)width(), (uint32_t)height() };
             
             std::array<VkClearValue, 2> clearValues = {};
-            clearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
-            clearValues[1].depthStencil = {1.0f, 0};
+            clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+            clearValues[1].depthStencil = { 1.0f, 0 };
 
             renderPassInfo.clearValueCount = clearValues.size();
             renderPassInfo.pClearValues = clearValues.data();
@@ -907,7 +935,6 @@ private:
                 "failed to record command buffer!"
             );
         });
-
     }
 
     void createSemaphores() {
@@ -932,29 +959,34 @@ private:
         UBOShadowMap osUbo = {};
         osUbo.model = rotMat;
         osUbo.view = glm::lookAt(lightPos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        osUbo.proj = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+        osUbo.proj = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
         osUbo.proj[1][1] *= -1;
-
         uniformBuffers.shadowMap->update(osUbo);
 
         // Scene
-        UBOScene ubo = {};
-        ubo.model = rotMat;
-        ubo.view = glm::lookAt(glm::vec3(10.0f, 10.0f, 10.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), (float)width() / (float)height(), 0.1f, 100.0f);
-        ubo.proj[1][1] *= -1;
-        ubo.normal = glm::transpose(glm::inverse(ubo.view * ubo.model));
-        ubo.depthBiasMVP = osUbo.proj * osUbo.view * osUbo.model;
-        ubo.lightPos = lightPos;
-        ubo.isUseTexture = 1;  // False
-        uniformBuffers.object->update(ubo);
+        UBOSceneVS uboVS = {};
+        uboVS.model = rotMat;
+        uboVS.view = glm::lookAt(glm::vec3(10.0f, 10.0f, 10.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        uboVS.proj = glm::perspective(glm::radians(45.0f), (float)width() / (float)height(), 0.1f, 100.0f);
+        uboVS.proj[1][1] *= -1;
+        uboVS.normal = glm::transpose(glm::inverse(uboVS.view * uboVS.model));
+        uboVS.depthBiasMVP = osUbo.proj * osUbo.view; // * osUbo.model;
+        uboVS.lightPos = glm::vec4(lightPos, 0.0f);
+        uniformBuffers.objectVS->update(uboVS);
+        
+        UBOSceneFS uboFS = {};
+        uboFS.isUseTexture = 0;
+        uboFS.isReceiveShadow = 0;
+        uniformBuffers.objectFS->update(uboFS);
         
         // Floor
-        ubo.model = glm::mat4();
-        ubo.normal = glm::transpose(glm::inverse(ubo.view * ubo.model));
-        ubo.isUseTexture = 0;  // True
-        uniformBuffers.floor->update(ubo);
-
+        uboVS.model = glm::mat4();
+        uboVS.normal = glm::transpose(glm::inverse(uboVS.view * uboVS.model));
+        uniformBuffers.floorVS->update(uboVS);
+        
+        uboFS.isUseTexture = 1;
+        uboFS.isReceiveShadow = 1;
+        uniformBuffers.floorFS->update(uboFS);
     }
 
     void createShaderModule(const std::vector<char>& code, VkUniquePtr<VkShaderModule>& shaderModule) {
@@ -1020,7 +1052,7 @@ private:
     const float depthBiasConstant = 1.25f;
     const float depthBiasSlope = 1.75f;
 
-    const glm::vec3 lightPos = { 0.0f, 25.0f, 0.0f };
+    const glm::vec3 lightPos = { -10.0f, 10.0f, 10.0f };
 
     VkUniquePtr<VkFramebuffer> shadowMapFramebuffer{device(), vkDestroyFramebuffer};
     std::unique_ptr<VkTexture> shadowMapFbo = nullptr;
@@ -1034,8 +1066,10 @@ private:
     std::unique_ptr<VkTexture> floorTexture = nullptr;
 
     struct UniformBuffers {
-        std::unique_ptr<VkUniformBuffer<UBOScene>> object;
-        std::unique_ptr<VkUniformBuffer<UBOScene>> floor;
+        std::unique_ptr<VkUniformBuffer<UBOSceneVS>> objectVS;
+        std::unique_ptr<VkUniformBuffer<UBOSceneFS>> objectFS;
+        std::unique_ptr<VkUniformBuffer<UBOSceneVS>> floorVS;
+        std::unique_ptr<VkUniformBuffer<UBOSceneFS>> floorFS;
         std::unique_ptr<VkUniformBuffer<UBOShadowMap>> shadowMap;
     } uniformBuffers;
 
@@ -1053,8 +1087,6 @@ int main(int argc, char **argv) {
     static const int WIN_WIDTH = 800;
     static const int WIN_HEIGHT = 600;
     
-    printf("size = %zu\n", sizeof(UBOScene));
-
     MyVulkanApp app(enableValidationLayers);
     app.createWindow(WIN_WIDTH, WIN_HEIGHT, "Vulkan: shadow mapping");
 

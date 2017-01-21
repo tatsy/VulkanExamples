@@ -49,7 +49,7 @@ protected:
     virtual void initializeVk();
     virtual void resizeVk(int width, int height);
     virtual void paintVk();
-    virtual uint32_t startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore);
+    virtual int  startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore);
     virtual void endPaint(int imageIndex, const VkUniquePtr<VkSemaphore> &waitSemaphore);
 
     virtual void createInstance();

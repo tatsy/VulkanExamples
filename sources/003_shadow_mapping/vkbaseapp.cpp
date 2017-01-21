@@ -64,6 +64,8 @@ void VkBaseApp::run() {
 
         paintVk();
     }
+
+    vkDeviceWaitIdle(device_);
 }
 
 void VkBaseApp::createWindow(int width, int height, const std::string &title) {
@@ -497,7 +499,7 @@ void VkBaseApp::resizeVkBase(int width, int height) {
     resizeVk(width, height);
 }
 
-uint32_t VkBaseApp::startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore) {
+int VkBaseApp::startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore) {
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device(), swapChainHandler_.swapChain,
                                             std::numeric_limits<uint64_t>::max(),

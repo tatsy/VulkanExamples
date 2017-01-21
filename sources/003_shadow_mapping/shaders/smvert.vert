@@ -17,7 +17,7 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 0) out vec4 f_posScreen;
 
 void main() {
-    mat4 mvpMat = ubo.proj * ubo.view; // * ubo.model;
+    mat4 mvpMat = ubo.proj * ubo.view * ubo.model;
 
     gl_Position = mvpMat * vec4(inPosition, 1.0);
     f_posScreen = gl_Position;
