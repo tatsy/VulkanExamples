@@ -10,7 +10,6 @@
 
 #include <string>
 
-#include "vksmartptr.h"
 #include "vkswapchainutils.h"
 
 // Function prototype declarations.
@@ -32,9 +31,9 @@ public:
 
     inline GLFWwindow * const window() const { return window_; }
 
-    inline const VkUniquePtr<VkDevice> & device() const { return device_; }
+    inline const VkDevice & device() const { return device_; }
     inline const VkPhysicalDevice & physicalDevice() const { return physicalDevice_; }
-    inline const VkUniquePtr<VkCommandPool> & commandPool() const { return commandPool_; }
+    inline const VkCommandPool & commandPool() const { return commandPool_; }
 
     inline int width() const { return swapChainHandler_.extent.width; }
     inline int height() const { return swapChainHandler_.extent.height; }
@@ -49,10 +48,11 @@ protected:
     virtual void initializeVk();
     virtual void resizeVk(int width, int height);
     virtual void paintVk();
-    virtual int  startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore);
-    virtual void endPaint(int imageIndex, const VkUniquePtr<VkSemaphore> &waitSemaphore);
+    virtual int  startPaint(const VkSemaphore &waitSemaphore);
+    virtual void endPaint(int imageIndex, const VkSemaphore &waitSemaphore);
 
     virtual void createInstance();
+    virtual void setupDebugMessenger();
     virtual void createSurface();
     virtual void pickPhysicalDevice();
     virtual void createLogicalDevice();
@@ -68,10 +68,11 @@ protected:
 
     virtual void queueSubmit(const VkSubmitInfo &submitInfo);
 
+    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo);
     void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-                     VkMemoryPropertyFlags property, VkUniquePtr<VkImage> &image, VkUniquePtr<VkDeviceMemory> &imageMemory);
+                     VkMemoryPropertyFlags property, VkImage &image, VkDeviceMemory &imageMemory);
 
-    void createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkUniquePtr<VkImageView>& imageView);
+    void createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView& imageView);
     void transferImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 
 private:
@@ -88,20 +89,19 @@ private:
     GLFWwindow *window_;
     bool isEnableValidationLayer_ = false;
 
-    VkUniquePtr<VkInstance> instance_{vkDestroyInstance};
-    VkUniquePtr<VkDebugReportCallbackEXT> debugCallback_{instance_, destroyDebugReportCallbackEXT};
-
-    VkUniquePtr<VkSurfaceKHR> surface_{instance_, vkDestroySurfaceKHR};
+    VkInstance instance_;
+    VkDebugUtilsMessengerEXT debugMessenger_;
+    VkSurfaceKHR surface_;
 
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-    VkUniquePtr<VkDevice> device_{vkDestroyDevice};
+    VkDevice device_;
 
     VkQueue graphicsQueue_;
     VkQueue presentQueue_;
 
-    VkSwapchainHandler swapChainHandler_{device_};
+    VkSwapchainHandler swapChainHandler_;
 
-    VkUniquePtr<VkCommandPool> commandPool_{device_, vkDestroyCommandPool};
+    VkCommandPool commandPool_;
 
     std::vector<VkCommandBuffer> commandBuffers_;
 

@@ -5,29 +5,20 @@
 #ifndef _VK_SWAPCHAIN_UTILS_H_
 #define _VK_SWAPCHAIN_UTILS_H_
 
-#include "vksmartptr.h"
-
 #include <vector>
 #include <algorithm>
 
 struct VkSwapchainHandler {
-    VkSwapchainHandler(const VkUniquePtr<VkDevice> &device) 
-        : swapChain{device, vkDestroySwapchainKHR}
-        , depthImage{device, vkDestroyImage}
-        , depthImageMemory{device, vkFreeMemory} 
-        , depthImageView{device, vkDestroyImageView} {
-    }
-
-    VkUniquePtr<VkSwapchainKHR> swapChain;
+    VkSwapchainKHR swapChain;
     std::vector<VkImage> images;
     VkFormat format;
     VkExtent2D extent;
-    std::vector<VkUniquePtr<VkImageView>> imageViews;
-    std::vector<VkUniquePtr<VkFramebuffer>> framebuffers;
+    std::vector<VkImageView> imageViews;
+    std::vector<VkFramebuffer> framebuffers;
 
-    VkUniquePtr<VkImage> depthImage;
-    VkUniquePtr<VkDeviceMemory> depthImageMemory;
-    VkUniquePtr<VkImageView> depthImageView;
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
 };
 
 // An object to manage swapchain details.

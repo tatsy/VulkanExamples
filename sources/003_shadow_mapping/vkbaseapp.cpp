@@ -10,39 +10,27 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_LUNARG_standard_validation"
 };
 
-VkResult createDebugReportCallbackEXT(
-    VkInstance instance, 
-    const VkDebugReportCallbackCreateInfoEXT* pCreateInfo,
-    const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) {
-
-    auto func = (PFN_vkCreateDebugReportCallbackEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
+static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger) {
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pCallback);
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
     } else {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 }
 
-void destroyDebugReportCallbackEXT(
-    VkInstance instance,
-    VkDebugReportCallbackEXT callback,
-    const VkAllocationCallbacks* pAllocator) {
-
-    auto func = (PFN_vkDestroyDebugReportCallbackEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT");
+static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
-        func(instance, callback, pAllocator);
+        func(instance, debugMessenger, pAllocator);
     }
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallbackFn(
-    VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objType, 
-    uint64_t obj, size_t location, int32_t code, const char* layerPrefix,
-    const char* msg, void* userData) {
-    
-    std::cerr << "validation layer: " << msg << std::endl;
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData) {
+    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
     return VK_FALSE;
 }
-
 
 VkBaseApp::VkBaseApp(bool isEnableValidationLayer)
     : isEnableValidationLayer_{isEnableValidationLayer} {
@@ -120,34 +108,48 @@ void VkBaseApp::createInstance() {
     createInfo.enabledExtensionCount = extensions.size();
     createInfo.ppEnabledExtensionNames = extensions.data();
 
-    // Validation layer support.
+    // Setup debug callback.
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
     if (isEnableValidationLayer_) {
+        createInfo.enabledLayerCount = validationLayers.size();
+        createInfo.ppEnabledLayerNames = validationLayers.data();
+
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT *) &debugCreateInfo;
     } else {
+        createInfo.enabledLayerCount = 0;
+        createInfo.pNext = nullptr;
     }
 
     // Create instance.
     CHECK_VULKAN_RUNTIME_ERROR(
-        vkCreateInstance(&createInfo, nullptr, instance_.replace()),
-        "failed to create instance!"
+            vkCreateInstance(&createInfo, nullptr, &instance_),
+            "failed to create instance!"
     );
+}
 
-    // Setup debug callback.
-    if (isEnableValidationLayer_) {
-        VkDebugReportCallbackCreateInfoEXT debugInfo = {};
-        debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-        debugInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-        debugInfo.pfnCallback = debugCallbackFn;
+void VkBaseApp::setupDebugMessenger() {
+    if (!isEnableValidationLayer_) return;
 
-        CHECK_VULKAN_RUNTIME_ERROR(
-            createDebugReportCallbackEXT(instance_, &debugInfo, nullptr, debugCallback_.replace()),
-            "failed to setup debug callback!"
-        );
+    VkDebugUtilsMessengerCreateInfoEXT createInfo;
+    populateDebugMessengerCreateInfo(createInfo);
+
+    if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_) != VK_SUCCESS) {
+        throw std::runtime_error("failed to set up debug messenger!");
     }
+}
+
+void VkBaseApp::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = debugCallback;
 }
 
 void VkBaseApp::createSurface() {
     CHECK_VULKAN_RUNTIME_ERROR(
-        glfwCreateWindowSurface(instance_, window_, nullptr, surface_.replace()),
+        glfwCreateWindowSurface(instance_, window_, nullptr, &surface_),
         "failed to create window surface!"
     );
 }
@@ -208,7 +210,7 @@ void VkBaseApp::createLogicalDevice() {
         createInfo.enabledLayerCount = 0;
     }
 
-    if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, device_.replace()) != VK_SUCCESS) {
+    if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
     }
 
@@ -276,7 +278,7 @@ void VkBaseApp::createSwapChain() {
     swapChainHandler_.extent = extent;
 
     // Create image views for new swapchain.
-    swapChainHandler_.imageViews.resize(swapChainHandler_.images.size(), VkUniquePtr<VkImageView>{device_, vkDestroyImageView});
+    swapChainHandler_.imageViews.resize(swapChainHandler_.images.size());
 
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -291,7 +293,7 @@ void VkBaseApp::createSwapChain() {
     for (uint32_t i = 0; i < swapChainHandler_.images.size(); i++) {
         viewInfo.image = swapChainHandler_.images[i];
         CHECK_VULKAN_RUNTIME_ERROR(
-            vkCreateImageView(device_, &viewInfo, nullptr, swapChainHandler_.imageViews[i].replace()),
+            vkCreateImageView(device_, &viewInfo, nullptr, &swapChainHandler_.imageViews[i]),
             "failed to create swapchain image view!"
         );
     }
@@ -309,11 +311,10 @@ void VkBaseApp::createSwapChain() {
 }
 
 void VkBaseApp::setupFramebuffers(const std::function<void(VkFramebuffer *, const VkImageView &, const VkImageView &)> &framebufferFn) {
-    swapChainHandler_.framebuffers.resize(swapChainHandler_.imageViews.size(), 
-        VkUniquePtr<VkFramebuffer>{device(), vkDestroyFramebuffer});
+    swapChainHandler_.framebuffers.resize(swapChainHandler_.imageViews.size());
 
     for (size_t i = 0; i < swapChainHandler_.imageViews.size(); i++) {
-        framebufferFn(swapChainHandler_.framebuffers[i].replace(),
+        framebufferFn(&swapChainHandler_.framebuffers[i],
                       swapChainHandler_.imageViews[i],
                       swapChainHandler_.depthImageView);
     }
@@ -327,7 +328,7 @@ void VkBaseApp::createCommandPool() {
     poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
 
     CHECK_VULKAN_RUNTIME_ERROR(
-        vkCreateCommandPool(device(), &poolInfo, nullptr, commandPool_.replace()),
+        vkCreateCommandPool(device(), &poolInfo, nullptr, &commandPool_),
         "failed to create graphics command pool!"
     );
 }
@@ -369,7 +370,7 @@ void VkBaseApp::queueSubmit(const VkSubmitInfo &submitInfo) {
 
 #pragma region Protected methods
 
-void VkBaseApp::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkUniquePtr<VkImage>& image, VkUniquePtr<VkDeviceMemory>& imageMemory) {
+void VkBaseApp::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -385,7 +386,7 @@ void VkBaseApp::createImage(uint32_t width, uint32_t height, VkFormat format, Vk
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateImage(device(), &imageInfo, nullptr, image.replace()) != VK_SUCCESS) {
+    if (vkCreateImage(device(), &imageInfo, nullptr, &image) != VK_SUCCESS) {
         throw std::runtime_error("failed to create image!");
     }
 
@@ -397,14 +398,14 @@ void VkBaseApp::createImage(uint32_t width, uint32_t height, VkFormat format, Vk
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(physicalDevice_, memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(device(), &allocInfo, nullptr, imageMemory.replace()) != VK_SUCCESS) {
+    if (vkAllocateMemory(device(), &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate image memory!");
     }
 
     vkBindImageMemory(device(), image, imageMemory, 0);
 }
 
-void VkBaseApp::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkUniquePtr<VkImageView>& imageView) {
+void VkBaseApp::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView& imageView) {
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
@@ -416,7 +417,7 @@ void VkBaseApp::createImageView(VkImage image, VkFormat format, VkImageAspectFla
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    if (vkCreateImageView(device(), &viewInfo, nullptr, imageView.replace()) != VK_SUCCESS) {
+    if (vkCreateImageView(device(), &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 }
@@ -499,7 +500,7 @@ void VkBaseApp::resizeVkBase(int width, int height) {
     resizeVk(width, height);
 }
 
-int VkBaseApp::startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore) {
+int VkBaseApp::startPaint(const VkSemaphore &waitSemaphore) {
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device(), swapChainHandler_.swapChain,
                                             std::numeric_limits<uint64_t>::max(),
@@ -515,7 +516,7 @@ int VkBaseApp::startPaint(const VkUniquePtr<VkSemaphore> &waitSemaphore) {
     return imageIndex;
 }
 
-void VkBaseApp::endPaint(int imageIndex, const VkUniquePtr<VkSemaphore> &waitSemaphore) {
+void VkBaseApp::endPaint(int imageIndex, const VkSemaphore &waitSemaphore) {
     // Presentation
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

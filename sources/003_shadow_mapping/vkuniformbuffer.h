@@ -32,7 +32,7 @@ public:
         copyBuffer(stagingBuffer_, buffer_, sizeof(ubo));    
     }
 
-    const VkUniquePtr<VkBuffer> & buffer() const {
+    const VkBuffer & buffer() const {
         return buffer_;
     }
 
@@ -41,10 +41,10 @@ public:
     }
 
 private:
-    VkUniquePtr<VkBuffer> buffer_{parentDevice(), vkDestroyBuffer};
-    VkUniquePtr<VkDeviceMemory> bufferMemory_{parentDevice(), vkFreeMemory};
-    VkUniquePtr<VkBuffer> stagingBuffer_{parentDevice(), vkDestroyBuffer};
-    VkUniquePtr<VkDeviceMemory> stagingBufferMemory_{parentDevice(), vkFreeMemory};
+    VkBuffer buffer_;
+    VkDeviceMemory bufferMemory_;
+    VkBuffer stagingBuffer_;
+    VkDeviceMemory stagingBufferMemory_;
 };
 
 #endif  // _VK_UNIFORM_BUFFER_H_

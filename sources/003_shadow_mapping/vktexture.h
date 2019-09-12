@@ -58,20 +58,20 @@ public:
         samplerInfo_.addressModeW = mode;
     }
 
-    const VkUniquePtr<VkSampler> & sampler() const {
+    const VkSampler & sampler() const {
         return sampler_;
     }
 
 private:
     void createSampler() {
         CHECK_VULKAN_RUNTIME_ERROR(
-            vkCreateSampler(parentDevice(), &samplerInfo_, nullptr, sampler_.replace()),
+            vkCreateSampler(parentDevice(), &samplerInfo_, nullptr, &sampler_),
             "failed to create depth sampler for offscreen!"
         );
     }
     
     VkSamplerCreateInfo samplerInfo_{};
-    VkUniquePtr<VkSampler> sampler_{parentDevice(), vkDestroySampler};
+    VkSampler sampler_;
 };
 
 #endif  // _VK_TEXTURE_H_

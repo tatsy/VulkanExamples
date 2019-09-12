@@ -33,8 +33,8 @@ public:
     }
 
     void setData(uint8_t *bytes, size_t imageSize) {
-        VkUniquePtr<VkImage> stagingImage{parentDevice(), vkDestroyImage};
-        VkUniquePtr<VkDeviceMemory> stagingImageMemory{parentDevice(), vkFreeMemory};
+        VkImage stagingImage;
+        VkDeviceMemory stagingImageMemory;
         createImage(width(), height(), format(), VK_IMAGE_TILING_LINEAR,
                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -74,7 +74,7 @@ public:
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    const VkUniquePtr<VkImageView> & imageView() const {
+    const VkImageView & imageView() const {
         return imageView_;
     }
     
@@ -171,7 +171,7 @@ private:
     void createImage(int width, int height, VkFormat format,
                      VkImageTiling tiling, VkImageUsageFlags usage,
                      VkMemoryPropertyFlags properties,
-                     VkUniquePtr<VkImage> &image, VkUniquePtr<VkDeviceMemory> &imageMemory) {
+                     VkImage &image, VkDeviceMemory &imageMemory) {
 
         VkImageCreateInfo imageInfo = {};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -189,7 +189,7 @@ private:
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         CHECK_VULKAN_RUNTIME_ERROR(
-            vkCreateImage(parentDevice(), &imageInfo, nullptr, image.replace()),
+            vkCreateImage(parentDevice(), &imageInfo, nullptr, &image),
             "failed to create image!"
         );
 
@@ -202,14 +202,14 @@ private:
         allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
         CHECK_VULKAN_RUNTIME_ERROR(
-            vkAllocateMemory(parentDevice(), &allocInfo, nullptr, imageMemory.replace()),
+            vkAllocateMemory(parentDevice(), &allocInfo, nullptr, &imageMemory),
             "failed to allocate image memory!"
         );
 
         vkBindImageMemory(parentDevice(), image, imageMemory, 0);
     }
 
-    void createImageView(VkFormat format, VkImageAspectFlags aspectFlags, VkUniquePtr<VkImageView> &imageView) const {
+    void createImageView(VkFormat format, VkImageAspectFlags aspectFlags, VkImageView &imageView) const {
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image_;
@@ -222,7 +222,7 @@ private:
         viewInfo.subresourceRange.layerCount = 1;
 
         CHECK_VULKAN_RUNTIME_ERROR(
-            vkCreateImageView(parentDevice(), &viewInfo, nullptr, imageView.replace()),
+            vkCreateImageView(parentDevice(), &viewInfo, nullptr, &imageView),
             "failed to create texture image view!"
         );
     }
@@ -234,9 +234,9 @@ private:
     VkImageTiling tiling_;
     VkImageAspectFlags aspect_;
 
-    VkUniquePtr<VkImage> image_{parentDevice(), vkDestroyImage};
-    VkUniquePtr<VkImageView> imageView_{parentDevice(), vkDestroyImageView};
-    VkUniquePtr<VkDeviceMemory> imageMemory_{parentDevice(), vkFreeMemory};
+    VkImage image_;
+    VkImageView imageView_;
+    VkDeviceMemory imageMemory_;
 };
 
 #endif  // _VK_IMAGE_BASE_H_

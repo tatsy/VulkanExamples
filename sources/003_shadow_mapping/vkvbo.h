@@ -111,8 +111,8 @@ private:
     void createVertexBuffer() {
         VkDeviceSize bufferSize = vertexData_.size() * sizeof(vertexData_[0]);
         
-        VkUniquePtr<VkBuffer> stagingBuffer{parentDevice(), vkDestroyBuffer};
-        VkUniquePtr<VkDeviceMemory> stagingBufferMemory{parentDevice(), vkFreeMemory};
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
         void* data;
@@ -128,8 +128,8 @@ private:
     void createIndexBuffer() {
         VkDeviceSize bufferSize = indices_.size() * sizeof(indices_[0]);
         
-        VkUniquePtr<VkBuffer> stagingBuffer{parentDevice(), vkDestroyBuffer};
-        VkUniquePtr<VkDeviceMemory> stagingBufferMemory{parentDevice(), vkFreeMemory};
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
         void* data;
@@ -147,10 +147,10 @@ private:
     std::vector<uint32_t> indices_;
     std::vector<VertexAttribInfo> attribInfo_;
 
-    VkUniquePtr<VkBuffer> vertexBuffer_{parentDevice(), vkDestroyBuffer};
-    VkUniquePtr<VkDeviceMemory> vertexBufferMemory_{parentDevice(), vkFreeMemory};
-    VkUniquePtr<VkBuffer> indexBuffer_{parentDevice(), vkDestroyBuffer};
-    VkUniquePtr<VkDeviceMemory> indexBufferMemory_{parentDevice(), vkFreeMemory};
+    VkBuffer vertexBuffer_;
+    VkDeviceMemory vertexBufferMemory_;
+    VkBuffer indexBuffer_;
+    VkDeviceMemory indexBufferMemory_;
 };
 
 #endif  // _VK_VBO_H_

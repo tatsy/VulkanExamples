@@ -28,8 +28,6 @@
 #include <stdexcept>
 #include <memory>
 
-#include "common.h"
-#include "vksmartptr.h"
 #include "vkbaseapp.h"
 #include "trimesh.h"
 #include "vkutils.h"
@@ -38,9 +36,10 @@
 #include "vktexture.h"
 #include "vkonetimecommand.h"
 
-static const std::string TEAPOT_FILE = std::string(DATA_DIRECTORY) + "teapot.obj";
-static const std::string FLOOR_FILE = std::string(DATA_DIRECTORY) + "floor.obj";
-static const std::string FLOOR_TEX_FILE = std::string(DATA_DIRECTORY) + "checker.png";
+static const std::string DATA_FOLDER = "../../../data/";
+static const std::string TEAPOT_FILE = DATA_FOLDER + "teapot.obj";
+static const std::string FLOOR_FILE = DATA_FOLDER + "floor.obj";
+static const std::string FLOOR_TEX_FILE = DATA_FOLDER + "checker.png";
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -165,18 +164,6 @@ protected:
 private:
 
     void initializeMembers() {
-        descriptorSetLayout = {device(), vkDestroyDescriptorSetLayout};
-
-        graphicsPipelines.object = { device(), vkDestroyPipeline };
-        graphicsPipelines.floor = { device(), vkDestroyPipeline };
-        graphicsPipelines.shadowMap = { device(), vkDestroyPipeline };
-
-        renderPasses.scene = { device(), vkDestroyRenderPass };
-        renderPasses.shadowMap = { device(), vkDestroyRenderPass };
-
-        pipelineLayouts.scene = { device(), vkDestroyPipelineLayout };
-        pipelineLayouts.shadowMap = { device(), vkDestroyPipelineLayout };
-
     }
 
     void createRenderPass() {
@@ -232,7 +219,7 @@ private:
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(device(), &renderPassInfo, nullptr, renderPasses.scene.replace()) != VK_SUCCESS) {
+        if (vkCreateRenderPass(device(), &renderPassInfo, nullptr, &renderPasses.scene) != VK_SUCCESS) {
             throw std::runtime_error("failed to create render pass!");
         }
     }
@@ -274,7 +261,7 @@ private:
         layoutInfo.bindingCount = bindings.size();
         layoutInfo.pBindings = bindings.data();
 
-        if (vkCreateDescriptorSetLayout(device(), &layoutInfo, nullptr, descriptorSetLayout.replace()) != VK_SUCCESS) {
+        if (vkCreateDescriptorSetLayout(device(), &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor set layout!");
         }
     }
@@ -361,7 +348,7 @@ private:
         renderPassInfo.dependencyCount = dependencies.size();
         renderPassInfo.pDependencies = dependencies.data();
 
-        if (vkCreateRenderPass(device(), &renderPassInfo, nullptr, renderPasses.shadowMap.replace()) != VK_SUCCESS) {
+        if (vkCreateRenderPass(device(), &renderPassInfo, nullptr, &renderPasses.shadowMap) != VK_SUCCESS) {
             throw std::runtime_error("failed to create render pass for offscreen!");
         }
     }
@@ -376,7 +363,7 @@ private:
         frameInfo.height = shadowMapSize;
         frameInfo.layers = 1;
 
-        if (vkCreateFramebuffer(device(), &frameInfo, nullptr, shadowMapFramebuffer.replace()) != VK_SUCCESS) {
+        if (vkCreateFramebuffer(device(), &frameInfo, nullptr, &shadowMapFramebuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to create framebuffer for offscreen!");
         }
     }
@@ -434,11 +421,11 @@ private:
 
     void createGraphicsPipeline() {
         // Shader
-        auto vertShaderCode = readFile(std::string(SOURCE_DIRECTORY) + "shaders/vert.spv");
-        auto fragShaderCode = readFile(std::string(SOURCE_DIRECTORY) + "shaders/frag.spv");
+        auto vertShaderCode = readFile("../shaders/render.vert.spv");
+        auto fragShaderCode = readFile("../shaders/render.frag.spv");
 
-        VkUniquePtr<VkShaderModule> vertShaderModule{device(), vkDestroyShaderModule};
-        VkUniquePtr<VkShaderModule> fragShaderModule{device(), vkDestroyShaderModule};
+        VkShaderModule vertShaderModule;
+        VkShaderModule fragShaderModule;
         createShaderModule(vertShaderCode, vertShaderModule);
         createShaderModule(fragShaderCode, fragShaderModule);
 
@@ -549,11 +536,11 @@ private:
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = setLayouts;
 
-        if (vkCreatePipelineLayout(device(), &pipelineLayoutInfo, nullptr, pipelineLayouts.scene.replace()) != VK_SUCCESS) {
+        if (vkCreatePipelineLayout(device(), &pipelineLayoutInfo, nullptr, &pipelineLayouts.scene) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout!");
         }
 
-        if (vkCreatePipelineLayout(device(), &pipelineLayoutInfo, nullptr, pipelineLayouts.shadowMap.replace()) != VK_SUCCESS) {
+        if (vkCreatePipelineLayout(device(), &pipelineLayoutInfo, nullptr, &pipelineLayouts.shadowMap) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout for offscreen!");
         }
 
@@ -574,23 +561,23 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, graphicsPipelines.object.replace()) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipelines.object) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
         // Graphics pipeline for floor.
         pipelineInfo.pVertexInputState = &floorVertexInputInfo;
  
-        if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, graphicsPipelines.floor.replace()) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipelines.floor) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
         // Graphics pipeline for offscreen.
-        auto vertShaderCode2 = readFile(std::string(SOURCE_DIRECTORY) + "shaders/smvert.spv");
-        auto fragShaderCode2 = readFile(std::string(SOURCE_DIRECTORY) + "shaders/smfrag.spv");
+        auto vertShaderCode2 = readFile("../shaders/shadow.vert.spv");
+        auto fragShaderCode2 = readFile("../shaders/shadow.frag.spv");
 
-        VkUniquePtr<VkShaderModule> vertShaderModule2{device(), vkDestroyShaderModule};
-        VkUniquePtr<VkShaderModule> fragShaderModule2{device(), vkDestroyShaderModule};
+        VkShaderModule vertShaderModule2;
+        VkShaderModule fragShaderModule2;
         createShaderModule(vertShaderCode2, vertShaderModule2);
         createShaderModule(fragShaderCode2, fragShaderModule2);
 
@@ -616,7 +603,7 @@ private:
         viewport.height = (float)shadowMapSize;
         scissor.extent = { shadowMapSize, shadowMapSize };
         
-        if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, graphicsPipelines.shadowMap.replace()) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipelines.shadowMap) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline for offscreen!");
         }
     }
@@ -723,7 +710,7 @@ private:
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = 3;
 
-        if (vkCreateDescriptorPool(device(), &poolInfo, nullptr, descriptorPool.replace()) != VK_SUCCESS) {
+        if (vkCreateDescriptorPool(device(), &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
     }
@@ -837,14 +824,14 @@ private:
         vkUpdateDescriptorSets(device(), offscreenDescriptorWrites.size(), offscreenDescriptorWrites.data(), 0, nullptr);
     }
 
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkUniquePtr<VkBuffer>& buffer, VkUniquePtr<VkDeviceMemory>& bufferMemory) {
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
         bufferInfo.usage = usage;
             bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        if (vkCreateBuffer(device(), &bufferInfo, nullptr, buffer.replace()) != VK_SUCCESS) {
+        if (vkCreateBuffer(device(), &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to create buffer!");
         }
 
@@ -856,7 +843,7 @@ private:
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(physicalDevice(), memRequirements.memoryTypeBits, properties);
 
-        if (vkAllocateMemory(device(), &allocInfo, nullptr, bufferMemory.replace()) != VK_SUCCESS) {
+        if (vkAllocateMemory(device(), &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate buffer memory!");
         }
 
@@ -941,9 +928,9 @@ private:
         VkSemaphoreCreateInfo semaphoreInfo = {};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-        if (vkCreateSemaphore(device(), &semaphoreInfo, nullptr, imageAvailableSemaphore.replace()) != VK_SUCCESS ||
-            vkCreateSemaphore(device(), &semaphoreInfo, nullptr, renderFinishedSemaphore.replace()) != VK_SUCCESS ||
-            vkCreateSemaphore(device(), &semaphoreInfo, nullptr, offscreenFinishedSemaphore.replace()) != VK_SUCCESS) {
+        if (vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+            vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+            vkCreateSemaphore(device(), &semaphoreInfo, nullptr, &offscreenFinishedSemaphore) != VK_SUCCESS) {
 
             throw std::runtime_error("failed to create semaphores!");
         }
@@ -953,7 +940,7 @@ private:
         static auto startTime = std::chrono::high_resolution_clock::now();
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
-        glm::mat4 rotMat = glm::rotate(glm::mat4(), time * glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 rotMat = glm::rotate(glm::mat4(1.0f), time * glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
         // Shadow map
         UBOShadowMap osUbo = {};
@@ -970,7 +957,7 @@ private:
         uboVS.proj = glm::perspective(glm::radians(45.0f), (float)width() / (float)height(), 0.1f, 100.0f);
         uboVS.proj[1][1] *= -1;
         uboVS.normal = glm::transpose(glm::inverse(uboVS.view * uboVS.model));
-        uboVS.depthBiasMVP = osUbo.proj * osUbo.view; // * osUbo.model;
+        uboVS.depthBiasMVP = osUbo.proj * osUbo.view;
         uboVS.lightPos = glm::vec4(lightPos, 0.0f);
         uniformBuffers.objectVS->update(uboVS);
         
@@ -980,7 +967,7 @@ private:
         uniformBuffers.objectFS->update(uboFS);
         
         // Floor
-        uboVS.model = glm::mat4();
+        uboVS.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -5.0f, 0.0f));
         uboVS.normal = glm::transpose(glm::inverse(uboVS.view * uboVS.model));
         uniformBuffers.floorVS->update(uboVS);
         
@@ -989,13 +976,13 @@ private:
         uniformBuffers.floorFS->update(uboFS);
     }
 
-    void createShaderModule(const std::vector<char>& code, VkUniquePtr<VkShaderModule>& shaderModule) {
+    void createShaderModule(const std::vector<char>& code, VkShaderModule& shaderModule) {
         VkShaderModuleCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         createInfo.codeSize = code.size();
         createInfo.pCode = (uint32_t*) code.data();
 
-        if (vkCreateShaderModule(device(), &createInfo, nullptr, shaderModule.replace()) != VK_SUCCESS) {
+        if (vkCreateShaderModule(device(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
             throw std::runtime_error("failed to create shader module!");
         }
     }
@@ -1021,22 +1008,22 @@ private:
 #pragma endregion
 
 #pragma region private parameters
-    VkUniquePtr<VkDescriptorSetLayout> descriptorSetLayout;
+    VkDescriptorSetLayout descriptorSetLayout;
 
     struct GraphicsPipelines {
-        VkUniquePtr<VkPipeline> object;
-        VkUniquePtr<VkPipeline> floor;
-        VkUniquePtr<VkPipeline> shadowMap;
+        VkPipeline object;
+        VkPipeline floor;
+        VkPipeline shadowMap;
     } graphicsPipelines;
 
     struct RenderPasses {
-        VkUniquePtr<VkRenderPass> scene;
-        VkUniquePtr<VkRenderPass> shadowMap;
+        VkRenderPass scene;
+        VkRenderPass shadowMap;
     } renderPasses;
 
     struct PipelineLayouts {
-        VkUniquePtr<VkPipelineLayout> scene;
-        VkUniquePtr<VkPipelineLayout> shadowMap;
+        VkPipelineLayout scene;
+        VkPipelineLayout shadowMap;
     } pipelineLayouts;
 
     struct DescriptorSets {
@@ -1054,7 +1041,7 @@ private:
 
     const glm::vec3 lightPos = { -10.0f, 10.0f, 10.0f };
 
-    VkUniquePtr<VkFramebuffer> shadowMapFramebuffer{device(), vkDestroyFramebuffer};
+    VkFramebuffer shadowMapFramebuffer;
     std::unique_ptr<VkTexture> shadowMapFbo = nullptr;
     
     // Meshes
@@ -1073,11 +1060,11 @@ private:
         std::unique_ptr<VkUniformBuffer<UBOShadowMap>> shadowMap;
     } uniformBuffers;
 
-    VkUniquePtr<VkDescriptorPool> descriptorPool{device(), vkDestroyDescriptorPool};
+    VkDescriptorPool descriptorPool;
 
-    VkUniquePtr<VkSemaphore> imageAvailableSemaphore{device(), vkDestroySemaphore};
-    VkUniquePtr<VkSemaphore> renderFinishedSemaphore{device(), vkDestroySemaphore};
-    VkUniquePtr<VkSemaphore> offscreenFinishedSemaphore{device(), vkDestroySemaphore};
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+    VkSemaphore offscreenFinishedSemaphore;
 
 #pragma endregion
 

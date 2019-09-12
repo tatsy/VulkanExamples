@@ -33,7 +33,7 @@ public:
         throw std::runtime_error("failed to find suitable memory type!");
     }
 
-    const VkUniquePtr<VkDevice> & parentDevice() const {
+    const VkDevice & parentDevice() const {
         return parent_->device_;
     }
 

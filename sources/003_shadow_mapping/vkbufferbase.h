@@ -9,7 +9,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include "vksmartptr.h"
 #include "vkmemorybase.h"
 #include "vkbaseapp.h"
 #include "vkonetimecommand.h"
@@ -21,14 +20,14 @@ public:
     }
 
 protected:
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkUniquePtr<VkBuffer>& buffer, VkUniquePtr<VkDeviceMemory>& bufferMemory) {
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        if (vkCreateBuffer(parentDevice(), &bufferInfo, nullptr, buffer.replace()) != VK_SUCCESS) {
+        if (vkCreateBuffer(parentDevice(), &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to create buffer!");
         }
 
@@ -40,7 +39,7 @@ protected:
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
-        if (vkAllocateMemory(parentDevice(), &allocInfo, nullptr, bufferMemory.replace()) != VK_SUCCESS) {
+        if (vkAllocateMemory(parentDevice(), &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate buffer memory!");
         }
 
