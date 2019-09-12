@@ -39,35 +39,35 @@ public:
                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     stagingImage, stagingImageMemory);
-        
+
         VkImageSubresource subresource = {};
         subresource.aspectMask = aspect();
         subresource.mipLevel = 0;
         subresource.arrayLayer = 0;
-        
+
         VkSubresourceLayout stagingImageLayout;
         vkGetImageSubresourceLayout(parentDevice(), stagingImage, &subresource, &stagingImageLayout);
-        
+
         void* data;
         vkMapMemory(parentDevice(), stagingImageMemory, 0, imageSize, 0, &data);
-        
+
         if (stagingImageLayout.rowPitch == width() * 4) {
             memcpy(data, bytes, (size_t) imageSize);
         } else {
             uint8_t* dataBytes = reinterpret_cast<uint8_t*>(data);
-            
+
             for (int y = 0; y < height(); y++) {
                 memcpy(&dataBytes[y * stagingImageLayout.rowPitch], &bytes[y * width() * 4], width() * 4);
             }
         }
-        
+
         vkUnmapMemory(parentDevice(), stagingImageMemory);
-        
+
         changeImageLayout(stagingImage, format_, VK_IMAGE_LAYOUT_PREINITIALIZED,
                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         changeImageLayout(image_, format_, VK_IMAGE_LAYOUT_PREINITIALIZED,
                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        
+
         copyImage(stagingImage, image_, width_, height_);
         
         changeImageLayout(image_, format_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
