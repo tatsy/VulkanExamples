@@ -35,8 +35,7 @@ const std::string MODEL_PATH = DATA_FOLDER + "chalet.obj";
 const std::string TEXTURE_PATH = DATA_FOLDER + "chalet.jpg";
 
 const std::vector<const char*> validationLayers = {
-    "VK_LAYER_LUNARG_standard_validation",
-    "VK_LAYER_KHRONOS_validation"
+    "VK_LAYER_LUNARG_standard_validation"
 };
 
 const std::vector<const char*> deviceExtensions = {
