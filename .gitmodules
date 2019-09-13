@@ -1,0 +1,6 @@
+[submodule "sources/ext/stb"]
+	path = sources/ext/stb
+	url = https://github.com/nothings/stb.git
+[submodule "sources/ext/tinyobjloader"]
+	path = sources/ext/tinyobjloader
+	url = https://github.com/syoyo/tinyobjloader.git

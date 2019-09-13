@@ -1,24 +1,17 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-out gl_PerVertex {
-    vec4 gl_Position;
-};
-
 layout(binding = 0) uniform UniformBufferObject {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
+    mat4 mvpMat;
 } ubo;
 
-layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
+layout(location = 0) in vec3 in_pos;
+layout(location = 1) in vec3 in_normal;
+layout(location = 2) in vec2 in_uv;
 
-layout(location = 0) out vec4 f_posScreen;
+layout(location = 0) out vec4 f_posScreenSpace;
 
 void main() {
-    mat4 mvpMat = ubo.proj * ubo.view * ubo.model;
-
-    gl_Position = mvpMat * vec4(inPosition, 1.0);
-    f_posScreen = gl_Position;
+    gl_Position = ubo.mvpMat * vec4(in_pos, 1.0);
+    f_posScreenSpace = gl_Position;
 }

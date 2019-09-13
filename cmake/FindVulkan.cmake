@@ -12,7 +12,7 @@ find_path(VULKAN_INCLUDE_DIR
           ${VULKAN_DIR}/include)
 
 find_library(VULKAN_LIBRARY
-             NAMES vulkan
+             NAMES vulkan vulkan-1
              PATHS
              /usr/lib
              /usr/local/lib
@@ -29,6 +29,7 @@ find_package_handle_standard_args(
 if (VULKAN_FOUND)
     message(STATUS "Vulkan include: ${VULKAN_INCLUDE_DIR}")
     message(STATUS "Vulkan library: ${VULKAN_LIBRARY}")
-    set(VULKAN_INCLUDE_DIRS ${VULKAN_INCLUDE_DIR})
-    set(VULKAN_LIBRARIES ${VULKAN_LIBRARY})
+    set(VULKAN_INCLUDE_DIRS ${VULKAN_INCLUDE_DIR} CACHE PATH "")
+    set(VULKAN_LIBRARIES ${VULKAN_LIBRARY} CACHE FILEPATH "")
+    mark_as_advanced(VULKAN_INCLUDE_DIR VULKAN_LIBRARY)
 endif()

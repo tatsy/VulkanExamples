@@ -17,6 +17,7 @@ function(BUILD_EXAMPLE EXPNAME)
     set(CMAKE_DEBUG_POSTFIX "-debug")
 
     # Set output executable
+    message(STATUS ${GLM_INCLUDE_DIRS})
     include_directories(${GLM_INCLUDE_DIRS}
                         ${GLFW3_INCLUDE_DIRS}
                         ${VULKAN_INCLUDE_DIRS})
@@ -44,8 +45,10 @@ function(BUILD_EXAMPLE EXPNAME)
                            ARGS -i "${SHADER}" -V -o "${OUTPUT_SHADER}"
                            DEPENDS ${SHADER})
 
-        add_custom_target(GLSLANG_${EXPNAME}_${BASE_NAME} ALL SOURCES ${OUTPUT_SHADER})
-        add_dependencies(${EXPNAME} GLSLANG_${EXPNAME}_${BASE_NAME})
+        set(CUSTOM_TARGET_NAME GLSLANG_${EXPNAME}_${BASE_NAME})
+        add_custom_target(${CUSTOM_TARGET_NAME} ALL SOURCES ${OUTPUT_SHADER})
+        add_dependencies(${EXPNAME} ${CUSTOM_TARGET_NAME})
+        set_target_properties(${CUSTOM_TARGET_NAME} PROPERTIES FOLDER "GLSLang")
     endforeach()
 
     if (MSVC)

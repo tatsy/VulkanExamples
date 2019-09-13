@@ -24,6 +24,7 @@
 #include <cstring>
 #include <array>
 #include <set>
+#include <optional>
 #include <unordered_map>
 
 const int WIDTH = 800;
@@ -515,15 +516,9 @@ private:
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
 
-        VkSwapchainKHR oldSwapChain = swapChain;
-        createInfo.oldSwapchain = oldSwapChain;
-
-        VkSwapchainKHR newSwapChain;
-        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &newSwapChain) != VK_SUCCESS) {
+        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
             throw std::runtime_error("failed to create swap chain!");
         }
-
-        swapChain = newSwapChain;
 
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
@@ -1144,9 +1139,9 @@ private:
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
-        std::string err;
+        std::string err, warn;
 
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH.c_str())) {
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
             throw std::runtime_error(err);
         }
 
